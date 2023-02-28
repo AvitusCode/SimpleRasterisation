@@ -1,205 +1,187 @@
-#include <iostream>
-#include <algorithm>
-#include <cmath>
-#include <vector>
-#include <array>
 
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
+// WinApi
+#include <windows.h>
+#include <windowsx.h>
+#include <tchar.h>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
+#include "Display.h"
 #include "Model.h"
 #include "renderer.h"
-#include "window.h"
 
 constexpr int WIDTH  = 800;
 constexpr int HEIGHT = 800;
 constexpr int DEPTH = 255;
+constexpr int PIXEL_SIZE = 1;
 
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 0.0f);
-glm::vec3 fragPos = glm::vec3(0.0f, 0.0f, -3.0f);
-glm::vec3 lightPos = glm::vec3(5.0f, 5.0f, -5.0f);
+using namespace jd;
 
-using namespace glm;
+LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
-void Render(vec4 p0, vec4 p1, vec4 p2, vec2 t0, vec2 t1, vec2 t2, Model& data, WinRender& wr)
+bool jdCreateWindow(HINSTANCE hInstance, PSTR szCmdLine, int iCmdShow, HWND& hwnd, WNDCLASSEX& wndclass)
 {
-	// примен€ем трансформации и делаем перспективное деление
-	mat4 transform = data.projection * data.view * data.model;
-	vec4 temp = transform * p0;
-	vec3 res1 = vec3(temp.x / temp.w, temp.y / temp.w, temp.z / temp.w);
-	temp = transform * p1;
-	vec3 res2 = vec3(temp.x / temp.w, temp.y / temp.w, temp.z / temp.w);
-	temp = transform * p2;
-	vec3 res3 = vec3(temp.x / temp.w, temp.y / temp.w, temp.z / temp.w);
+	const int clientWidth = WIDTH * PIXEL_SIZE;
+	const int clientHeight = HEIGHT * PIXEL_SIZE;
+	static TCHAR szAppName[] = _T("MainWindow");
 
-	// ќтсекаем грани, что смотр€т в противоположную от зрител€ сторону
-	vec3 normal = cross(res2 - res1, res3 - res1);
-	if (dot(normal, data.ViewDir) > 0) {
-		return;
+	RECT rect = { 0, 0, clientWidth, clientHeight };
+
+	wndclass.cbSize = sizeof(wndclass);
+	wndclass.style = CS_BYTEALIGNCLIENT;
+	wndclass.lpfnWndProc = WndProc;
+	wndclass.cbClsExtra = 0;
+	wndclass.cbWndExtra = sizeof(jd::Window*) + sizeof(Display*) + sizeof(Model*);
+	wndclass.hInstance = hInstance;
+	wndclass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+	wndclass.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wndclass.hbrBackground = (HBRUSH)GetStockObject(LTGRAY_BRUSH);
+	wndclass.lpszMenuName = L"";
+	wndclass.lpszClassName = szAppName;
+	wndclass.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
+
+	RegisterClassEx(&wndclass);
+
+	hwnd = CreateWindow(szAppName,		 // window class name
+		_T("SimpleRasterisation"),		 // window caption
+		WS_OVERLAPPEDWINDOW,	 // window style
+		CW_USEDEFAULT,			 // initial x position
+		CW_USEDEFAULT,			 // initial y position
+		clientWidth,			 // initial x size
+		clientHeight,			 // initial y size
+		NULL,					// parent window handle
+		NULL,					// window menu handle
+		hInstance,				 // program instance handle
+		szCmdLine);					 // creation parameters
+
+	if (!hwnd) {
+		return false;
 	}
 
-	std::array<glm::ivec3, 3> triangle = { {jd::Viewport3D(res1, 0, 0, wr.getWidth(), wr.getHeight(), wr.getDepth()),
-			                   jd::Viewport3D(res2, 0, 0, wr.getWidth(), wr.getHeight(), wr.getDepth()),
-			                   jd::Viewport3D(res3, 0, 0, wr.getWidth(), wr.getHeight(), wr.getDepth())} };
-	data.Normal = normalize(cross(vec3(data.model * (p1 - p0)), vec3(data.model * (p2 - p0))));
-	std::array<glm::vec2, 3> tex;
-	tex[0] = t0; tex[1] = t1; tex[2] = t2;
+	GetWindowRect(hwnd, &rect);
+	rect.bottom = rect.left + clientHeight;
+	rect.right = rect.top + clientWidth;
+	AdjustWindowRect(&rect, GetWindowLong(hwnd, GWL_STYLE), 0);
 
-	jd::DrawTriangle(triangle, tex, data, wr);
+	SetWindowPos(hwnd, 0, rect.left, rect.top,
+		rect.right - rect.left,
+		rect.bottom - rect.top, 0);
+
+	ShowWindow(hwnd, SW_SHOW);
+	UpdateWindow(hwnd);
 }
 
-/*
-ambient = vec3(0.0f, 0.05f, 0.0f),
-*/
-
-void rast_cube(WinRender& wr, const std::vector<vec4>& vertices, const std::vector<vec2>& tex)
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLine, int iCmdShow)
 {
-	vec3 color = vec3(1.0f, 1.0f, 1.0f);
-	mat4 model = mat4(1.0f);
-	mat4 view = mat4(1.0f);
-	mat4 projection = mat4(1.0f);
+	HWND hwnd;
+	WNDCLASSEX wndclass;
 
-	view = glm::translate(view, fragPos);
-	model = glm::scale(model, vec3(0.2f));
-	model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), vec3(0.5f, 1.0f, 1.0f));
-	projection = glm::perspective(glm::radians(45.0f), (float)wr.getWidth() / wr.getHeight(), 0.1f, 100.f);
-
-	Model data = { 
-		model, 
-		view, 
-		projection, 
-		vec3(0.0f), 
-		fragPos - cameraPos, 
-		fragPos, 
-		lightPos, 
-		color,
-		std::move(jd::LoadTexture("box.png", true)),
-		vec3(0.3f, 0.24f, 0.14f),
-		vec3(0.7f, 0.42f, 0.26f),
-		vec3(0.5f, 0.5f, 0.5f),
-		64.0f
-	};
-
-	for (uint16_t i = 0; i < vertices.size(); i += 3) {
-		Render(vertices[i], vertices[i + 1], vertices[i + 2], tex[i], tex[i + 1], tex[i + 2], data, wr);
+	if (!jdCreateWindow(hInstance, szCmdLine, iCmdShow, hwnd, wndclass)) {
+		return false;
 	}
+
+	Window* window = (Window*)GetWindowLongPtr(hwnd, sizeof(Display*));
+	window->setHWND(hwnd);
+
+	jd::startProgramm(*window);
+
+	return window->getMSG().wParam;
 }
 
-int main(void) 
+LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 {
-	WinRender wr;
-	if (!wr.init(WIDTH, HEIGHT, "rasterization project", "pixel.vert", "pixel.frag")) {
-		return -1;
-	}
+	POINT point;
 
-	std::vector<vec4> vertices = {
-		// задн€€ грань
-		vec4(-1.0f, -1.0f, -1.0f, 1.0f), // нижн€€-лева€
-		vec4(1.0f,  1.0f, -1.0f, 1.0f), // верхн€€-права€
-		vec4(1.0f, -1.0f, -1.0f, 1.0f),  // нижн€€-права€         
-		vec4(1.0f,  1.0f, -1.0f, 1.0f),  // верхн€€-права€
-		vec4(-1.0f, -1.0f, -1.0f, 1.0f),  // нижн€€-лева€
-		vec4(-1.0f,  1.0f, -1.0f, 1.0f),   // верхн€€-лева€
-
-		// передн€€ грань
-		vec4(-1.0f, -1.0f,  1.0f, 1.0f),  // нижн€€-лева€
-		vec4(1.0f, -1.0f,  1.0f, 1.0f),  // нижн€€-права€
-		vec4(1.0f,  1.0f,  1.0f, 1.0f),  // верхн€€-права€
-		vec4(1.0f,  1.0f,  1.0f, 1.0f),   // верхн€€-права€
-		vec4(-1.0f,  1.0f,  1.0f, 1.0f),   // верхн€€-лева€
-		vec4(-1.0f, -1.0f,  1.0f, 1.0f),   // нижн€€-лева€
-
-		 // грань слева
-		vec4(-1.0f,  1.0f,  1.0f, 1.0f),  // верхн€€-права€
-		vec4(-1.0f,  1.0f, -1.0f, 1.0f),  // верхн€€-лева€
-		vec4(-1.0f, -1.0f, -1.0f, 1.0f),  // нижн€€-лева€
-		vec4(-1.0f, -1.0f, -1.0f, 1.0f),  // нижн€€-лева€
-		vec4(-1.0f, -1.0f,  1.0f, 1.0f), // нижн€€-права€
-		vec4(-1.0f,  1.0f,  1.0f, 1.0f),  // верхн€€-права€
-
-		   // грань справа
-	    vec4(1.0f,  1.0f,  1.0f, 1.0f), // верхн€€-лева€
-		vec4(1.0f, -1.0f, -1.0f, 1.0f), // нижн€€-права€
-		vec4(1.0f,  1.0f, -1.0f, 1.0f), // верхн€€-права€         
-		vec4(1.0f, -1.0f, -1.0f, 1.0f), // нижн€€-права€
-		vec4(1.0f,  1.0f,  1.0f, 1.0f), // верхн€€-лева€
-		vec4(1.0f, -1.0f,  1.0f, 1.0f), // нижн€€-лева€     
-
-			   // нижн€€ грань
-		vec4(-1.0f, -1.0f, -1.0f, 1.0f), // верхн€€-права€
-		vec4(1.0f, -1.0f, -1.0f, 1.0f), // верхн€€-лева€
-		vec4(1.0f, -1.0f,  1.0f, 1.0f), // нижн€€-лева€
-		vec4(1.0f, -1.0f,  1.0f, 1.0f), // нижн€€-лева€
-		vec4(-1.0f, -1.0f,  1.0f, 1.0f), // нижн€€-права€
-		vec4(-1.0f, -1.0f, -1.0f, 1.0f), // верхн€€-права€
-
-				   // верхн€€ грань
-		vec4(-1.0f,  1.0f, -1.0f, 1.0f), // верхн€€-лева€
-		vec4(1.0f,  1.0f , 1.0f, 1.0f), // нижн€€-права€
-		vec4(1.0f,  1.0f, -1.0f, 1.0f), // верхн€€-права€     
-		vec4(1.0f,  1.0f,  1.0f, 1.0f),  // нижн€€-права€
-		vec4(-1.0f,  1.0f, -1.0f, 1.0f), // верхн€€-лева€
-		vec4(-1.0f,  1.0f,  1.0f, 1.0f)  // нижн€€-лева€        
-	};
-
-	std::vector<vec2> textures = {
-		vec2(0.0f, 0.0f),
-		vec2(1.0f, 1.0f),
-		vec2(1.0f, 0.0f),
-		vec2(1.0f, 1.0f),
-		vec2(0.0f, 0.0f),
-		vec2(0.0f, 1.0f),
-
-		vec2(0.0f, 0.0f),
-		vec2(1.0f, 0.0f),
-		vec2(1.0f, 1.0f),
-		vec2(1.0f, 1.0f),
-		vec2(0.0f, 1.0f),
-		vec2(0.0f, 0.0f),
-
-		vec2(1.0f, 0.0f),
-		vec2(1.0f, 1.0f),
-		vec2(0.0f, 1.0f),
-		vec2(0.0f, 1.0f),
-		vec2(0.0f, 0.0f),
-		vec2(1.0f, 0.0f),
-
-		vec2(1.0f, 0.0f),
-		vec2(0.0f, 1.0f),
-		vec2(1.0f, 1.0f),
-		vec2(0.0f, 1.0f),
-		vec2(1.0f, 0.0f),
-		vec2(0.0f, 0.0f),
-
-		vec2(0.0f, 1.0f),
-		vec2(1.0f, 1.0f),
-		vec2(1.0f, 0.0f),
-		vec2(1.0f, 0.0f),
-		vec2(0.0f, 0.0f),
-		vec2(0.0f, 1.0f),
-
-		vec2(0.0f, 1.0f),
-		vec2(1.0f, 0.0f),
-		vec2(1.0f, 1.0f),
-		vec2(1.0f, 0.0f),
-		vec2(0.0f, 1.0f),
-		vec2(0.0f, 0.0f)
-	};
-
-	while (!wr.windowShouldClose())
+	switch (iMsg)
 	{
-		wr.pollEvents();
-		wr.processInput();
-
-		wr.useRender();
-		rast_cube(wr, vertices, textures);
-
-		wr.flush(0.3f, 0.24f, 0.14f, 1.0f);
+	case WM_CREATE:
+	{
+		Display* image = new Display{ WIDTH, HEIGHT, DEPTH, PIXEL_SIZE, new jdByte[WIDTH * HEIGHT * 4] };
+		Window* window = new Window{};
+		SetWindowLongPtr(hwnd, 0, (LONG_PTR)image);
+		SetWindowLongPtr(hwnd, sizeof(Display*), (LONG_PTR)window);
+		break;
 	}
 
-	wr.shutdown();
-	return 0;
+	case WM_LBUTTONDOWN:
+	{
+		Window* window = (Window*)GetWindowLongPtr(hwnd, sizeof(Display*));
+		window->setMove(true);
+		RECT& WinRect = window->getRect();
+		POINT& MouseInWin = window->getMouseIn();
+		GetWindowRect(hwnd, &WinRect);
+
+		point.x = GET_X_LPARAM(lParam);
+		point.y = GET_Y_LPARAM(lParam);
+		ClientToScreen(hwnd, (LPPOINT)&point);
+
+		MouseInWin.x = point.x - WinRect.left;
+		MouseInWin.y = point.y - WinRect.top;
+
+		SetCapture(hwnd);
+		break;
+	}
+	case WM_MOUSEMOVE:
+	{
+		const Window* const window = (Window*)GetWindowLongPtr(hwnd, sizeof(Display*));
+		GetCursorPos((LPPOINT)&point);
+		if (window->getMove()) {
+			const POINT& MouseInWin = window->getMouseIn();
+			const RECT& WinRect = window->getRect();
+			SetWindowPos(hwnd, 0,
+				point.x - MouseInWin.x,
+				point.y - MouseInWin.y,
+				WinRect.right - WinRect.left,
+				WinRect.bottom - WinRect.top, 0);
+			UpdateWindow(hwnd);
+		}
+		break;
+	}
+	case WM_LBUTTONUP:
+	{
+		Window* window = (Window*)GetWindowLongPtr(hwnd, sizeof(Display*));
+		window->setMove(false);
+		ReleaseCapture();
+		break;
+	}
+	case WM_KEYDOWN:
+		switch (wParam)
+		{
+		case VK_ESCAPE:
+			PostMessage(hwnd, WM_DESTROY, 0, 0);
+		}
+		break;
+	case WM_SIZE:
+	{
+		Display* image = (Display*)GetWindowLongPtr(hwnd, 0);
+		int nWidth  = LOWORD(lParam);
+		int nHeight = HIWORD(lParam);
+		
+		// Changing the buffer to a new size
+		jdByte* nDisplayBitmap = new (std::nothrow) jdByte[nWidth * nHeight * 4];
+
+		if (!nDisplayBitmap) {
+			break;
+		}
+
+		delete[] image->displayBitMap;
+		image->displayBitMap = nDisplayBitmap;
+		image->width = nWidth;
+		image->height = nHeight;
+
+		UpdateWindow(hwnd);
+		break;
+	}
+	case WM_DESTROY:
+	{
+		Display* image = (Display*)GetWindowLongPtr(hwnd, 0);
+		Window* window = (Window*)GetWindowLongPtr(hwnd, sizeof(Display*));
+		imgFree(*image);
+		delete window;
+		delete image;
+		PostQuitMessage(0);
+		ExitProcess(0);
+		break;
+	}
+	}
+
+	return DefWindowProc(hwnd, iMsg, wParam, lParam);
 }
