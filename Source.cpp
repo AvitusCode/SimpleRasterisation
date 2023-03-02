@@ -10,6 +10,8 @@
 
 constexpr int WIDTH  = 800;
 constexpr int HEIGHT = 800;
+constexpr int MAX_WIDTH = 1920;
+constexpr int MAX_HEIGHT = 1080;
 constexpr int DEPTH = 255;
 constexpr int PIXEL_SIZE = 1;
 
@@ -94,8 +96,25 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 	{
 	case WM_CREATE:
 	{
-		Display* image = new Display{ WIDTH, HEIGHT, DEPTH, PIXEL_SIZE, new jdByte[WIDTH * HEIGHT * 4] };
-		Window* window = new Window{};
+		Display* image = nullptr;
+		Window* window = nullptr;
+
+		try {
+			image = new Display{ WIDTH, HEIGHT, DEPTH, PIXEL_SIZE, new jdByte[MAX_WIDTH * MAX_HEIGHT * 4] };
+			window = new Window{};
+		}
+		catch (std::bad_alloc& e) {
+			MessageBoxA(hwnd, (LPCSTR)L"Memmory allocation error", (LPCSTR)L"Error", MB_OK | MB_ICONERROR);
+			if (!window)
+			{
+				if (image) {
+					delete image;
+				}
+			}
+			PostMessage(hwnd, WM_DESTROY, 0, 0);
+			break;
+		}
+
 		SetWindowLongPtr(hwnd, 0, (LONG_PTR)image);
 		SetWindowLongPtr(hwnd, sizeof(Display*), (LONG_PTR)window);
 		break;
@@ -152,20 +171,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 	case WM_SIZE:
 	{
 		Display* image = (Display*)GetWindowLongPtr(hwnd, 0);
-		int nWidth  = LOWORD(lParam);
-		int nHeight = HIWORD(lParam);
-		
-		// Changing the buffer to a new size
-		jdByte* nDisplayBitmap = new (std::nothrow) jdByte[nWidth * nHeight * 4];
-
-		if (!nDisplayBitmap) {
-			break;
-		}
-
-		delete[] image->displayBitMap;
-		image->displayBitMap = nDisplayBitmap;
-		image->width = nWidth;
-		image->height = nHeight;
+	
+		image->width = LOWORD(lParam);
+		image->height = HIWORD(lParam);
 
 		UpdateWindow(hwnd);
 		break;
