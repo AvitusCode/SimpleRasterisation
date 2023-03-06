@@ -64,16 +64,22 @@ namespace jd
 		}
 	}
 
-	void imgFree(Display& image) {
+	void imgClearBuffer(Display& image) {
+		memset(image.zBuffer, 255, image.width * image.height * sizeof(jdByte));
+	}
+
+	void imgFree(Display& image) 
+	{
 		delete[] image.displayBitMap;
+		delete[] image.zBuffer;
 	}
 
 	void putPixel(Display& image, int x, int y, glm::vec3 color)
 	{
-		unsigned int index = x + y * image.width;
+		unsigned int index = (x + y * image.width) << 2;
 
-		image.displayBitMap[(index << 2) + 0] = static_cast<jdByte>(255 * color.z);
-		image.displayBitMap[(index << 2) + 1] = static_cast<jdByte>(255 * color.y);
-		image.displayBitMap[(index << 2) + 2] = static_cast<jdByte>(255 * color.x);
+		image.displayBitMap[index + 0] = static_cast<jdByte>(255 * color.z);
+		image.displayBitMap[index + 1] = static_cast<jdByte>(255 * color.y);
+		image.displayBitMap[index + 2] = static_cast<jdByte>(255 * color.x);
 	}
 }

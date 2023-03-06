@@ -74,15 +74,19 @@ namespace jd
 		}
 
 		glm::ivec3 frag;
+		const glm::vec3 z_pts = glm::vec3(pts[0].z, pts[1].z, pts[2].z);
 		for (frag.x = bboxmin.x; frag.x <= bboxmax.x; frag.x++)
 		{
 			for (frag.y = bboxmin.y; frag.y <= bboxmax.y; frag.y++)
 			{
 				glm::vec3 bc = barycentric(pts, frag);
-				if (bc.x < 0 || bc.y < 0 || bc.z < 0) {
+				jdByte frag_depth = static_cast<jdByte>(glm::dot(z_pts, bc));
+				
+				if (bc.x < 0 || bc.y < 0 || bc.z < 0 || frag_depth > render.zBuffer[frag.x + frag.y * render.width]) {
 					continue;
 				}
 
+				render.zBuffer[frag.x + frag.y * render.width] = frag_depth;
 				float u = tex[0].x * bc.x + tex[1].x * bc.y + tex[2].x * bc.z;
 				float v = tex[0].y * bc.x + tex[1].y * bc.y + tex[2].y * bc.z;
 				data.FragColor = data.image.getColor(u, v);
@@ -292,7 +296,8 @@ namespace jd
 
 		while (true)
 		{
-			imgClear(*image, 0xFF000000);
+			imgClear(*image, JD_BLACK);
+			imgClearBuffer(*image);
 
 			rast_cube(*image, vertices, textures);
 

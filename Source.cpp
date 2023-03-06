@@ -100,7 +100,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 		Window* window = nullptr;
 
 		try {
-			image = new Display{ WIDTH, HEIGHT, DEPTH, PIXEL_SIZE, new jdByte[MAX_WIDTH * MAX_HEIGHT * 4] };
+			image = new Display{ WIDTH, HEIGHT, DEPTH, PIXEL_SIZE, new jdByte[MAX_WIDTH * MAX_HEIGHT * 4], new jdByte[MAX_WIDTH * MAX_HEIGHT]};
 			window = new Window{};
 		}
 		catch (std::bad_alloc& e) {
@@ -108,6 +108,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			if (!window)
 			{
 				if (image) {
+					imgFree(*image);
 					delete image;
 				}
 			}
