@@ -98,4 +98,12 @@ namespace jd
 		}
 		oldTime = timeGetTime() + curTime;
 	}
+
+	bool Window::work() const {
+		return renderLoop;
+	}
+
+	void Window::setStop() {
+		renderLoop = false;
+	}
 }

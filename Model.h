@@ -34,7 +34,6 @@ namespace jd
 		glm::vec3 getColor(float u, float v) const;
 	};
 
-
 	struct Model
 	{
 		glm::mat4 model;

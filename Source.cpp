@@ -3,10 +3,17 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <tchar.h>
+#include "menuSupport.h"
 
 #include "Display.h"
 #include "Model.h"
 #include "renderer.h"
+
+/*
+TODO:
+    1) Разработать аллокатор
+	2) пнг
+*/
 
 constexpr int WIDTH  = 800;
 constexpr int HEIGHT = 800;
@@ -18,6 +25,7 @@ constexpr int PIXEL_SIZE = 1;
 using namespace jd;
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+DWORD WINAPI WndThreadProc(_In_ LPVOID lParameter);
 
 bool jdCreateWindow(HINSTANCE hInstance, PSTR szCmdLine, int iCmdShow, HWND& hwnd, WNDCLASSEX& wndclass)
 {
@@ -31,7 +39,7 @@ bool jdCreateWindow(HINSTANCE hInstance, PSTR szCmdLine, int iCmdShow, HWND& hwn
 	wndclass.style = CS_BYTEALIGNCLIENT;
 	wndclass.lpfnWndProc = WndProc;
 	wndclass.cbClsExtra = 0;
-	wndclass.cbWndExtra = sizeof(jd::Window*) + sizeof(Display*) + sizeof(Model*);
+	wndclass.cbWndExtra = sizeof(jd::Window*) + sizeof(Display*) + sizeof(HANDLE);
 	wndclass.hInstance = hInstance;
 	wndclass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
 	wndclass.hCursor = LoadCursor(NULL, IDC_ARROW);
@@ -69,6 +77,8 @@ bool jdCreateWindow(HINSTANCE hInstance, PSTR szCmdLine, int iCmdShow, HWND& hwn
 
 	ShowWindow(hwnd, SW_SHOW);
 	UpdateWindow(hwnd);
+
+	return true;
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLine, int iCmdShow)
@@ -83,9 +93,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLine
 	Window* window = (Window*)GetWindowLongPtr(hwnd, sizeof(Display*));
 	window->setHWND(hwnd);
 
-	jd::startProgramm(*window);
+	HANDLE threadProc = CreateThread(NULL, 0, WndThreadProc, (LPVOID)window, 0, NULL);
+	SetWindowLongPtr(hwnd, sizeof(Display*) + sizeof(Window*), (LONG_PTR)threadProc);
+	
+	while (window->work()) {
+		window->wait();
+	}
 
 	return window->getMSG().wParam;
+}
+
+DWORD WINAPI WndThreadProc(_In_ LPVOID lParameter)
+{
+	Window* window = static_cast<Window*>(lParameter);
+	jd::startProgramm(*window);
+	return 0;
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
@@ -94,6 +116,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 
 	switch (iMsg)
 	{
+		HANDLE_MSG(hwnd, WM_COMMAND, WndProcMenu);
 	case WM_CREATE:
 	{
 		Display* image = nullptr;
@@ -103,8 +126,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			image = new Display{ WIDTH, HEIGHT, DEPTH, PIXEL_SIZE, new jdByte[MAX_WIDTH * MAX_HEIGHT * 4], new jdByte[MAX_WIDTH * MAX_HEIGHT]};
 			window = new Window{};
 		}
-		catch (std::bad_alloc& e) {
-			MessageBoxA(hwnd, (LPCSTR)L"Memmory allocation error", (LPCSTR)L"Error", MB_OK | MB_ICONERROR);
+		catch (const std::bad_alloc& e) {
+			MessageBoxA(hwnd, (LPCSTR)(e.what()), (LPCSTR)L"Error", MB_OK | MB_ICONERROR);
 			if (!window)
 			{
 				if (image) {
@@ -115,6 +138,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 			PostMessage(hwnd, WM_DESTROY, 0, 0);
 			break;
 		}
+
+		WndAddMenus(hwnd);
 
 		SetWindowLongPtr(hwnd, 0, (LONG_PTR)image);
 		SetWindowLongPtr(hwnd, sizeof(Display*), (LONG_PTR)window);
@@ -143,7 +168,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 	{
 		const Window* const window = (Window*)GetWindowLongPtr(hwnd, sizeof(Display*));
 		GetCursorPos((LPPOINT)&point);
-		if (window->getMove()) {
+		if (window->getMove()) 
+		{
 			const POINT& MouseInWin = window->getMouseIn();
 			const RECT& WinRect = window->getRect();
 			SetWindowPos(hwnd, 0,
@@ -165,6 +191,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 	case WM_KEYDOWN:
 		switch (wParam)
 		{
+		case VK_RIGHT:
+		{
+			Window* window = (Window*)GetWindowLongPtr(hwnd, sizeof(Display*));
+			window->setButtonClick(BUTTON::RIGHT);
+			break;
+		}
+		case VK_LEFT:
+		{
+			Window* window = (Window*)GetWindowLongPtr(hwnd, sizeof(Display*));
+			window->setButtonClick(BUTTON::LEFT);
+			break;
+		}
 		case VK_ESCAPE:
 			PostMessage(hwnd, WM_DESTROY, 0, 0);
 		}
@@ -172,6 +210,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 	case WM_SIZE:
 	{
 		Display* image = (Display*)GetWindowLongPtr(hwnd, 0);
+
+		if (!image) {
+			break;
+		}
 	
 		image->width = LOWORD(lParam);
 		image->height = HIWORD(lParam);
@@ -183,9 +225,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 	{
 		Display* image = (Display*)GetWindowLongPtr(hwnd, 0);
 		Window* window = (Window*)GetWindowLongPtr(hwnd, sizeof(Display*));
+		window->setStop();
+		HANDLE threadProc = (HANDLE)GetWindowLongPtr(hwnd, sizeof(Display*) + sizeof(Window*));
+		TerminateThread(threadProc, 0);
+		CloseHandle(threadProc);
+
 		imgFree(*image);
 		delete window;
 		delete image;
+
 		PostQuitMessage(0);
 		ExitProcess(0);
 		break;

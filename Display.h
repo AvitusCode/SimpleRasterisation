@@ -4,6 +4,20 @@
 
 namespace jd
 {
+	enum class RENDER : uint8_t
+	{
+		CUBE,
+		TRIANGE,
+		FRACTAL
+	};
+
+	enum class BUTTON : uint8_t
+	{
+		NOTHING,
+		RIGHT,
+		LEFT
+	};
+
 	class Window
 	{
 	public:
@@ -25,6 +39,27 @@ namespace jd
 		void setPause(DWORD value);
 		void wait();
 
+		bool work() const;
+		void setStop();
+
+		// TEST SECTION
+		void setRender(RENDER rend) {
+			render = rend;
+		}
+		RENDER getRender() const {
+			return render;
+		}
+		void setButtonClick(BUTTON b) {
+			if (button == BUTTON::NOTHING || b == BUTTON::NOTHING) {
+				button = b;
+			}
+		}
+		BUTTON getButtonClick() const {
+			return button;
+		}
+
+		// END TEST SECTION
+
 	private:
 		HWND wnd;
 		MSG msg;
@@ -35,5 +70,10 @@ namespace jd
 
 		DWORD curTime;
 		DWORD oldTime;
+
+		RENDER render = RENDER::CUBE;
+		BUTTON button = BUTTON::NOTHING;
+
+		bool renderLoop = true;
 	};
 }

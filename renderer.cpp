@@ -3,6 +3,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "stb_image.h"
 
+#include "Fractal.h"
 namespace jd
 {
 	// Render functions
@@ -112,6 +113,185 @@ namespace jd
 		return glm::ivec3((vec.x + 1.0f) * width / 2.0f + x, (vec.y + 1.0f) * height / 2.0f + y, (vec.z + 1.0f) * depth / 2.0f);
 	}
 
+	[[nodiscard]] std::vector<glm::ivec3> TriangulatePolygon(const std::vector<glm::vec3> vertex, glm::vec3 Normal)
+	{
+		constexpr float EPS = 0.001f;
+		std::vector<glm::ivec3> indexes;
+		std::vector<bool> active(vertex.size(), true);
+		glm::ivec3 triangle;
+
+		auto GetNext = [](int64_t x, int64_t size, const std::vector<bool>& active) {
+			while (true)
+			{
+				if (++x == size) {
+					x = 0;
+				}
+				if (active[x]) {
+					return x;
+				}
+			}
+		};
+
+		auto GetPrev = [](int64_t x, int64_t size, const std::vector<bool>& active) {
+			while (true)
+			{
+				if (--x == -1) {
+					x = size - 1;
+				}
+				if (active[x]) {
+					return x;
+				}
+			}
+		};
+
+		int64_t triangleCount = 0;
+		int64_t start = 0;
+		int64_t p1 = 0;
+		int64_t p2 = 1;
+		int64_t m1 = vertex.size() - 1;
+		int64_t m2 = vertex.size() - 2;
+
+		bool lastPositive = false;
+		while (true)
+		{
+			if (p2 == m2)
+			{
+				// Only three vertices remain
+				triangle.x = m1;
+				triangle.y = p1;
+				triangle.z = p2;
+				triangleCount++;
+				indexes.push_back(triangle);
+				break;
+			}
+
+			const glm::vec3& vp1 = vertex[p1];
+			const glm::vec3& vp2 = vertex[p2];
+			const glm::vec3& vm1 = vertex[m1];
+			const glm::vec3& vm2 = vertex[m2];
+			bool positive = false;
+			bool negative = false;
+
+			glm::vec3 n1 = glm::cross(Normal, glm::normalize(vm1 - vp2));
+			if (glm::dot(n1, vp1 - vp2) > EPS)
+			{
+				positive = true;
+				glm::vec3 n2 = glm::cross(Normal, glm::normalize(vp1 - vm1));
+				glm::vec3 n3 = glm::cross(Normal, glm::normalize(vp2 - vp1));
+
+				for (int64_t i = 0; i < vertex.size(); i++)
+				{
+					if (active[i] && i != p1 && i != p2 && i != m1)
+					{
+						const glm::vec3& vi = vertex[i];
+
+						if (glm::dot(n1, glm::normalize(vi - vp2)) > -EPS
+							&& glm::dot(n2, glm::normalize(vi - vm1)) > -EPS
+							&& glm::dot(n3, glm::normalize(vi - vp1)) > -EPS)
+						{
+							positive = false;
+							break;
+						}
+					}
+				}
+			}
+
+			n1 = glm::cross(Normal, glm::normalize(vm2 - vp1));
+			if (glm::dot(n1, vm1 - vp1) > EPS)
+			{
+				negative = true;
+				glm::vec3 n2 = glm::cross(Normal, glm::normalize(vm1 - vm2));
+				glm::vec3 n3 = glm::cross(Normal, glm::normalize(vp1 - vm1));
+
+				for (int64_t i = 0; i < vertex.size(); i++)
+				{
+					if (active[i] && i != m1 && i != m2 && i != p1)
+					{
+						const glm::vec3& vi = vertex[i];
+
+						if (glm::dot(n1, glm::normalize(vi - vp1)) > -EPS
+							&& glm::dot(n2, glm::normalize(vi - vm2)) > -EPS
+							&& glm::dot(n3, glm::normalize(vi - vm1)) > -EPS)
+						{
+							negative = false;
+							break;
+						}
+					}
+				}
+			}
+
+			if (positive && negative)
+			{
+				float pd = glm::dot(glm::normalize(vp2 - vm1), glm::normalize(vm2 - vm1));
+				float md = glm::dot(glm::normalize(vm2 - vp1), glm::normalize(vp2 - vp1));
+			
+				if (glm::abs(pd - md) < EPS)
+				{
+					if (lastPositive) {
+						positive = false;
+					}
+					else {
+						negative = false;
+					}
+				}
+				else
+				{
+					if (pd < md) {
+						negative = false;
+					}
+					else {
+						positive = false;
+					}
+				}
+			}
+
+			if (positive)
+			{
+				active[p1] = false;
+				triangle.x = m1;
+				triangle.y = p1;
+				triangle.z = p2;
+				triangleCount++;
+				indexes.push_back(triangle);
+
+				p1 = GetNext(p1, vertex.size(), active);
+				p2 = GetNext(p2, vertex.size(), active);
+				lastPositive = true;
+				start = -1;
+			}
+			else if (negative)
+			{
+				active[m1] = false;
+				triangle.x = m2;
+				triangle.y = m1;
+				triangle.z = p1;
+				triangleCount++;
+				indexes.push_back(triangle);
+
+				m1 = GetPrev(m1, vertex.size(), active);
+				m2 = GetPrev(m2, vertex.size(), active);
+				lastPositive = false;
+				start = -1; 
+			}
+			else
+			{
+				if (start == -1) {
+					start = p2;
+				}
+				else if (start == p2) {
+					break;
+				}
+
+				m2 = m1;
+				m1 = p1;
+				p1 = p2;
+				p2 = GetNext(p2, vertex.size(), active);
+			}
+		}
+
+		return indexes;
+	}
+
 	[[nodiscard]] Texture LoadTexture(const char* filename, bool inverse)
 	{
 		int width, height, nrChanals;
@@ -192,6 +372,59 @@ namespace jd
 
 		for (uint16_t i = 0; i < vertices.size(); i += 3) {
 			Render(vertices[i], vertices[i + 1], vertices[i + 2], tex[i], tex[i + 1], tex[i + 2], data, image);
+		}
+	}
+
+	void draw_fractal(Display& display, Window& window, IFractal& m_fractal)
+	{
+		if (window.getButtonClick() == BUTTON::RIGHT) {
+			m_fractal.CurveNext();
+			window.setButtonClick(BUTTON::NOTHING);
+		}
+		else if (window.getButtonClick() == BUTTON::LEFT) {
+			m_fractal.CurvePrev();
+			window.setButtonClick(BUTTON::NOTHING);
+		}
+
+		glm::vec3 color = glm::vec3(1.0f, 1.0f, 1.0f);
+
+		m_fractal.CurveDraw(display, color);
+	}
+
+	// @param vertices: in display coords
+	// @param indexes: indexes of triangulated polygon
+	// @param triangulate: 0 or 1 - off/on triangulation mode
+	void draw_triangulation(Display& display, Window& window, const std::vector<glm::vec3>& vertices, std::vector<glm::ivec3>& indexes, int& triangulate)
+	{
+		if (window.getButtonClick() == BUTTON::RIGHT)
+		{
+			indexes = TriangulatePolygon(vertices, glm::vec3(0.0f, 0.0f, -1.0f));
+			triangulate = 1;
+			window.setButtonClick(BUTTON::NOTHING);
+		}
+		else if (window.getButtonClick() == BUTTON::LEFT)
+		{
+			indexes.clear();
+			triangulate = 0;
+			window.setButtonClick(BUTTON::NOTHING);
+		}
+
+		glm::vec3 color = glm::vec3(1.0f, 1.0f, 1.0f);
+
+		if (triangulate)
+		{
+			for (size_t i = 0; i < indexes.size(); i++)
+			{
+				jd::DrawLine(vertices[indexes[i].x], vertices[indexes[i].y], color, display);
+				jd::DrawLine(vertices[indexes[i].y], vertices[indexes[i].z], color, display);
+				jd::DrawLine(vertices[indexes[i].z], vertices[indexes[i].x], color, display);
+			}
+		}
+		else
+		{
+			for (size_t i = 0; i < vertices.size(); i++) {
+				jd::DrawLine(vertices[i], vertices[(i + 1) % vertices.size()], color, display);
+			}
 		}
 	}
 
@@ -293,16 +526,46 @@ namespace jd
 		
 		window.setPause(16); // fps ~= 60 per sec
 		Display* image = (Display*)GetWindowLongPtr(window.getHWND(), 0);
+		mFractal m_fractal;
+		m_fractal.CurveCreate(image->width / 4.0f, image->height / 2.0f, image->width * 3.0f / 4.0f, image->height * 3.0f / 4.0f);
 
-		while (true)
+		std::vector<glm::vec3> polygon = {
+			glm::vec3(1.0f / 9.0f * image->width, 8.9f / 9.0f * image->height, 0.0f),
+			glm::vec3(3.0f / 9.0f * image->width, 8.4f / 9.0f * image->height, 0.0f),
+			glm::vec3(5.0f / 9.0f * image->width, 5.0f / 9.0f * image->height, 0.0f),
+			glm::vec3(7.0f / 9.0f * image->width, 7.0f / 9.0f * image->height, 0.0f),
+			glm::vec3(8.5f / 9.0f * image->width, 3.5f / 9.0f * image->height, 0.0f),
+			glm::vec3(5.5f / 9.0f * image->width, 3.0f / 9.0f * image->height, 0.0f),
+			glm::vec3(4.5f / 9.0f * image->width, 1.0f / 9.0f * image->height, 0.0f),
+			glm::vec3(2.5f / 9.0f * image->width, 1.3f / 9.0f * image->height, 0.0f),
+			glm::vec3(0.5f / 9.0f * image->width, 3.5f / 9.0f * image->height, 0.0f)
+		};
+
+		std::vector<glm::ivec3> indexes;
+		// Triangulare on/off
+		int triangulate = 0;
+
+		while (window.work())
 		{
 			imgClear(*image, JD_BLACK);
 			imgClearBuffer(*image);
 
-			rast_cube(*image, vertices, textures);
+			switch (window.getRender())
+			{
+			case RENDER::CUBE:
+				rast_cube(*image, vertices, textures);
+				break;
+
+			case RENDER::TRIANGE:
+				draw_triangulation(*image, window, polygon, indexes, triangulate);
+				break;
+
+			case RENDER::FRACTAL:
+				draw_fractal(*image, window, m_fractal);
+				break;
+			}
 
 			window.drawBuffer(*image);
-			window.wait();
 		}
 	}
 }
