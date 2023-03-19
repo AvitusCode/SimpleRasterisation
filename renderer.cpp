@@ -2,6 +2,7 @@
 #include <vector>
 #include <glm/gtc/matrix_transform.hpp>
 #include "stb_image.h"
+#include "utils.h"
 
 #include "Fractal.h"
 namespace jd
@@ -526,7 +527,7 @@ namespace jd
 		
 		window.setPause(16); // fps ~= 60 per sec
 		Display* image = (Display*)GetWindowLongPtr(window.getHWND(), 0);
-		mFractal m_fractal;
+		mFractal m_fractal(&window.getAllocator());
 		m_fractal.CurveCreate(image->width / 4.0f, image->height / 2.0f, image->width * 3.0f / 4.0f, image->height * 3.0f / 4.0f);
 
 		std::vector<glm::vec3> polygon = {

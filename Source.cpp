@@ -7,20 +7,8 @@
 
 #include "Display.h"
 #include "Model.h"
+#include "WndFunc.h"
 #include "renderer.h"
-
-/*
-TODO:
-    1) Разработать аллокатор
-	2) пнг
-*/
-
-constexpr int WIDTH  = 800;
-constexpr int HEIGHT = 800;
-constexpr int MAX_WIDTH = 1920;
-constexpr int MAX_HEIGHT = 1080;
-constexpr int DEPTH = 255;
-constexpr int PIXEL_SIZE = 1;
 
 using namespace jd;
 
@@ -29,8 +17,8 @@ DWORD WINAPI WndThreadProc(_In_ LPVOID lParameter);
 
 bool jdCreateWindow(HINSTANCE hInstance, PSTR szCmdLine, int iCmdShow, HWND& hwnd, WNDCLASSEX& wndclass)
 {
-	const int clientWidth = WIDTH * PIXEL_SIZE;
-	const int clientHeight = HEIGHT * PIXEL_SIZE;
+	const int clientWidth = Window::WIDTH * Window::PIXEL_SIZE;
+	const int clientHeight = Window::HEIGHT * Window::PIXEL_SIZE;
 	static TCHAR szAppName[] = _T("MainWindow");
 
 	RECT rect = { 0, 0, clientWidth, clientHeight };
@@ -119,30 +107,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 		HANDLE_MSG(hwnd, WM_COMMAND, WndProcMenu);
 	case WM_CREATE:
 	{
-		Display* image = nullptr;
-		Window* window = nullptr;
-
-		try {
-			image = new Display{ WIDTH, HEIGHT, DEPTH, PIXEL_SIZE, new jdByte[MAX_WIDTH * MAX_HEIGHT * 4], new jdByte[MAX_WIDTH * MAX_HEIGHT]};
-			window = new Window{};
-		}
-		catch (const std::bad_alloc& e) {
-			MessageBoxA(hwnd, (LPCSTR)(e.what()), (LPCSTR)L"Error", MB_OK | MB_ICONERROR);
-			if (!window)
-			{
-				if (image) {
-					imgFree(*image);
-					delete image;
-				}
-			}
-			PostMessage(hwnd, WM_DESTROY, 0, 0);
-			break;
-		}
-
-		WndAddMenus(hwnd);
-
-		SetWindowLongPtr(hwnd, 0, (LONG_PTR)image);
-		SetWindowLongPtr(hwnd, sizeof(Display*), (LONG_PTR)window);
+		WndCreate(hwnd, iMsg, wParam, lParam);
 		break;
 	}
 

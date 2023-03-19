@@ -24,19 +24,4 @@ namespace jd
 
     // Main programm function
     void startProgramm(Window& window);
-
-    template<class T>
-    const T& MAX(const T& a, const T& b) {
-        return (a < b) ? b : a;
-    }
-
-    template<class T>
-    const T& MIN(const T& a, const T& b) {
-        return (b < a) ? b : a;
-    }
-
-    template <typename T>
-    T CLAMP(const T& value, const T& low, const T& high) {
-        return value < low ? low : (value > high ? high : value);
-    }
 }

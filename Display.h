@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include "Model.h"
+#include "allocator\stack_allocator.h"
 
 namespace jd
 {
@@ -58,7 +59,43 @@ namespace jd
 			return button;
 		}
 
+		void setAllocatorSize() {
+			sa.setMemTotal(win_config.d_MEMORY_SIZE);
+			sa.init();
+		}
+
+		auto& getAllocator() {
+			return sa;
+		}
+
 		// END TEST SECTION
+
+		static constexpr int WIDTH = 800;
+		static constexpr int HEIGHT = 800;
+		static constexpr int MAX_WIDTH = 1920;
+		static constexpr int MAX_HEIGHT = 1080;
+		static constexpr int DEPTH = 255;
+		static constexpr int PIXEL_SIZE = 1;
+		static constexpr int MEMORY_SIZE = 10'000;
+
+		struct WindowConfig
+		{
+			int d_WIDTH = WIDTH;
+			int d_HEIGHT = HEIGHT;
+			int d_MAX_WIDTH = MAX_WIDTH;
+			int d_MAX_HEIGHT = MAX_HEIGHT;
+			int d_DEPTH = DEPTH;
+			int d_PIXEL_SIZE = PIXEL_SIZE;
+			int d_MEMORY_SIZE = MEMORY_SIZE;
+		};
+
+		WindowConfig& getWindowConfig() {
+			return win_config;
+		}
+
+		const WindowConfig& getWindowConfig() const {
+			return win_config;
+		}
 
 	private:
 		HWND wnd;
@@ -75,5 +112,8 @@ namespace jd
 		BUTTON button = BUTTON::NOTHING;
 
 		bool renderLoop = true;
+
+		WindowConfig win_config;
+		jd::mem::StackAllocator sa{};
 	};
 }

@@ -1,12 +1,13 @@
 #include "Fractal.h"
 #include "renderer.h"
-
 using curve = jd::curve_t<float>;
+
+mFractal::mFractal(jd::mem::Allocator* allocator) : IFractal(), m_allocator(allocator), head(nullptr), n_curves(0) {}
 
 void mFractal::CurveCreate(float ax, float ay, float bx, float by)
 {
-	curve* m_curve = new curve;
-	curve* next = new curve;
+	curve* m_curve = emplace();
+	curve* next = emplace();
 
 	m_curve->point.x = ax;
 	m_curve->point.y = ay;
@@ -18,6 +19,7 @@ void mFractal::CurveCreate(float ax, float ay, float bx, float by)
 	next->data = 1.0f;
 
 	head = m_curve;
+	n_curves = 2;
 }
 
 void mFractal::CurveNext()
@@ -29,9 +31,18 @@ void mFractal::CurveNext()
 	int direction = 1;
 	curve* m_curve = head;
 
+	// Проверка для простого линейного аллокатора фиксированной длины
+	if (m_allocator) {
+		if (m_allocator->memUse() + (n_curves - 1) * (sizeof(curve) + sizeof(std::max_align_t)) > m_allocator->memTotal()) {
+			return;
+		}
+	}
+
+	n_curves += n_curves - 1;
+
 	// inserting intermediate points
 	do {
-		curve* mid_curve = new curve;
+		curve* mid_curve = emplace();
 		mid_curve->nextPoint = m_curve->nextPoint;
 
 		float dx = m_curve->nextPoint->point.x - m_curve->point.x;
@@ -64,8 +75,10 @@ void mFractal::CurvePrev()
 		curve* temp = next->nextPoint;
 		next->nextPoint = temp->nextPoint;
 		next = temp->nextPoint;
-		delete temp;
+		clear(temp);
 	}
+
+	n_curves = (n_curves + 1) / 2;
 }
 
 void mFractal::CurveDestroy() noexcept
@@ -76,7 +89,7 @@ void mFractal::CurveDestroy() noexcept
 		return;
 	}
 	else if (!temp->nextPoint) {
-		delete temp;
+		clear(temp);
 		return;
 	}
 
@@ -85,7 +98,7 @@ void mFractal::CurveDestroy() noexcept
 	while (next)
 	{
 		next = temp->nextPoint;
-		delete temp;
+		clear(temp);
 		temp = next;
 	}
 }
@@ -103,4 +116,15 @@ void mFractal::CurveDraw(jd::Display& display, glm::vec3 color) const
 
 mFractal::~mFractal() noexcept {
 	CurveDestroy();
+}
+
+void mFractal::clear(jd::curve_t<float>*& ptr) noexcept {
+	if (!m_allocator) {
+		delete ptr;
+	}
+	else {
+		m_allocator->deallocate(ptr);
+	}
+
+	ptr = nullptr;
 }
